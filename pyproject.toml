@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hoshiyume-swiss-api"
+version = "0.1.0"
+description = "Private astrology calculation API for HOSHIYUME"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "pydantic>=2.10,<3",
+  "pyswisseph==2.10.3.2",
+  "uvicorn>=0.34,<1",
+]
+
+[project.optional-dependencies]
+test = ["httpx>=0.27,<1", "pytest>=8,<10"]
+
+[tool.setuptools.packages.find]
+include = ["swiss_api*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
