@@ -24,7 +24,7 @@ export SWISS_API_TOKEN=replace-with-a-long-random-secret
 uvicorn swiss_api.main:app --host 127.0.0.1 --port 8000
 ```
 
-`GET /health` は天体暦ファイル未設定時に `not_ready` を返します。`POST /natal` はサービス用Bearerトークンが必須です。開発中でも外部公開しないでください。
+`GET /health` は天体暦ファイル未設定時に `not_ready` を返します。準備完了時は計算エンジン・ラッパー・天体暦データの版も返し、HOSHIYUMEのキャッシュキーに含めます。`POST /natal` はサービス用Bearerトークンが必須です。開発中でも外部公開しないでください。
 
 成功時の `POST /natal` は `schema_version`、`chart_type`、`calculation`、`bodies`、`angles`、`houses`、`aspects`、`warnings` を返します。型の正式な契約は `/openapi.json` と `swiss_api/models.py` で確認できます。`house_system_requested` と `house_system_used` を必ず区別し、切替時は `fallback_reason` と警告を返します。天体の黄経・黄緯・速度の単位はそれぞれ度・度・度/日です。`cusps_deg` は第1～第12ハウスの順です。
 

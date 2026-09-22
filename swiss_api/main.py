@@ -3,8 +3,10 @@
 import os
 from functools import lru_cache
 from hmac import compare_digest
+from importlib.metadata import version
 from pathlib import Path
 
+import swisseph as swe
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -34,7 +36,14 @@ def require_service_token(credentials: HTTPAuthorizationCredentials | None = Dep
 
 @app.get("/health")
 def health(engine: SwissEngine = Depends(get_engine)) -> dict:
-    return {"status": "ok" if engine.ready else "not_ready", "ephemeris_files_configured": engine.ready}
+    return {
+        "status": "ok" if engine.ready else "not_ready",
+        "ephemeris_files_configured": engine.ready,
+        "engine_version": swe.version if engine.ready else None,
+        "wrapper_version": version("pyswisseph") if engine.ready else None,
+        "ephemeris_dataset_sha256": engine.dataset_hash,
+        "rules_version": "natal_v1",
+    }
 
 
 @app.post("/natal", response_model=NatalResponse, dependencies=[Depends(require_service_token)])

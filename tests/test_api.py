@@ -33,7 +33,14 @@ def test_health_without_ephemeris(client, monkeypatch):
     monkeypatch.delenv("SWISS_EPHE_PATH", raising=False)
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "not_ready", "ephemeris_files_configured": False}
+    assert response.json() == {
+        "status": "not_ready",
+        "ephemeris_files_configured": False,
+        "engine_version": None,
+        "wrapper_version": None,
+        "ephemeris_dataset_sha256": None,
+        "rules_version": "natal_v1",
+    }
 
 
 def test_natal_requires_service_authentication(client):
