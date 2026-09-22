@@ -43,6 +43,15 @@ def test_health_without_ephemeris(client, monkeypatch):
     }
 
 
+def test_health_not_ready_without_service_token(client, tmp_path, monkeypatch):
+    _mock_engine(tmp_path, monkeypatch)
+    monkeypatch.setenv("SWISS_EPHE_PATH", str(tmp_path))
+    monkeypatch.delenv("SWISS_API_TOKEN")
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "not_ready"
+
+
 def test_natal_requires_service_authentication(client):
     assert client.post("/natal", json=KNOWN).status_code == 401
     assert client.post("/natal", json=KNOWN, headers={"Authorization": "Bearer wrong"}).status_code == 401

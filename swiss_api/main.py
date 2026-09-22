@@ -36,8 +36,9 @@ def require_service_token(credentials: HTTPAuthorizationCredentials | None = Dep
 
 @app.get("/health")
 def health(engine: SwissEngine = Depends(get_engine)) -> dict:
+    ready = engine.ready and bool(os.getenv("SWISS_API_TOKEN"))
     return {
-        "status": "ok" if engine.ready else "not_ready",
+        "status": "ok" if ready else "not_ready",
         "ephemeris_files_configured": engine.ready,
         "engine_version": swe.version if engine.ready else None,
         "wrapper_version": version("pyswisseph") if engine.ready else None,
