@@ -14,6 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from swiss_api.calculation import EphemerisUnavailable, SwissEngine
 from swiss_api.models import NatalRequest, NatalResponse
+from swiss_api.rules import current_rules, rules_sha256
 
 app = FastAPI(title="HOSHIYUME Calculation API", version="0.1.0")
 bearer = HTTPBearer(auto_error=False)
@@ -83,6 +84,7 @@ def corresponding_source() -> RedirectResponse:
 def health(engine: SwissEngine = Depends(get_engine)) -> dict:
     source = source_code_url()
     ready = engine.ready and bool(os.getenv("SWISS_API_TOKEN")) and source is not None
+    rules = current_rules()
     return {
         "status": "ok" if ready else "not_ready",
         "ephemeris_files_configured": engine.ready,
@@ -90,9 +92,25 @@ def health(engine: SwissEngine = Depends(get_engine)) -> dict:
         "engine_version": swe.version if engine.ready else None,
         "wrapper_version": version("pyswisseph") if engine.ready else None,
         "ephemeris_dataset_sha256": engine.dataset_hash,
-        "rules_version": "natal_v1",
+        "rules_version": rules["rules_version"],
+        "rules_sha256": rules_sha256(),
+        "zodiac_system": rules["zodiac_system"],
+        "house_system": rules["house_system"],
+        "orb_profile": rules["orb_profile"],
+        "body_ids": [body["id"] for body in rules["bodies"]],
+        "aspect_ids": [aspect["id"] for aspect in rules["aspects"]],
         "license": LICENSE_ID,
         "source_code_url": source,
+    }
+
+
+@app.get("/rules")
+def public_rules() -> dict:
+    """Public, non-personal data for guide and glossary clients via HOSHIYUME."""
+    return {
+        "rules_version": current_rules()["rules_version"],
+        "rules_sha256": rules_sha256(),
+        "rules": current_rules(),
     }
 
 

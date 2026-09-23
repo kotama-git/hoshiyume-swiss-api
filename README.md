@@ -4,11 +4,23 @@ HOSHIYUME本体と別リポジトリで扱う、計算専用の開発中サー�
 
 このリポジトリは `AGPL-3.0-or-later` で公開する方針です。稼働中の全応答には `Link: <SOURCE_CODE_URL>; rel="source"` を付け、`/source` から対応ソースへ移動できます。`SOURCE_CODE_URL` は、実際にデプロイしたタグまたはコミットを指すHTTPS URLにしてください。ライセンス境界の判断はリポジトリ分離だけで確定しないため、HOSHIYUME側の密接な接続コードも別途公開対象として管理します。
 
+## HOSHIYUME 占星術ルール V1
+
+計算ルールの唯一の設定元は `swiss_api/rules/astrology_rules_v1.json` です。コード内にオーブや標準方式を重複して書かず、各計算結果にはルールの版とSHA-256を残します。
+
+- Zodiac: Tropical
+- House system: Placidus（利用不能時だけ Whole Sign へ明示的に切替）
+- Node: True North Node と、そこから導く South Node
+- 支配星: 現代西洋占星術（蠍座=冥王星、水瓶座=天王星、魚座=海王星）
+- オーブ: 合/衝 ±8°、三分/矩 ±6°、六分 ±4°、クインカンクス ±3°、セミセクスタイル/セミスクエア/セスキコードレート ±2°
+
+`GET /rules` は個人情報を含まない現行ルールを返します。HOSHIYUMEのガイド・用語集は、ブラウザーからSwiss APIを直接呼ばず、HOSHIYUME側の安全な経路を通じてこの同一ルールを参照します。
+
 ## 計算の境界
 
 - HOSHIYUME側が地名を座標とIANAタイムゾーンに変換し、既知の出生時刻をUTCへ確定します。このAPIは地名の検索やAI解釈をしません。
 - ブラウザーから直接アクセスさせず、HOSHIYUMEサーバーだけが `SWISS_API_TOKEN` を使って呼びます。APIへユーザーID・氏名・施設名・夢データを送らないでください。
-- 天体は太陽から冥王星までの10天体、トロピカル方式。ネイタルの主要アスペクトは合・衝8°、矩・三分6°、六分4°を境界含みで採用します。
+- 天体は太陽から冥王星までの10天体とTrue North / South Node、トロピカル方式です。ネイタルの9アスペクトとオーブは上記のルール設定を境界を含めて採用します。
 - ハウスはPlacidus。計算失敗時はSwissの自動Porphyry結果を採用せず、Whole Signで再計算し、使用方式と理由を返します。出生時刻不明・地理的極点ではハウスを返しません。
 - 出生時刻不明の場合は現地正午を**日付だけに基づく計算基準**として使用し、実際の出生時刻とは扱いません。ASC・MC・ハウス・確定アスペクトを返さず、天体位置は `date_reference_only` と明示します。
 - 指定されたSwiss天体暦ファイルがない場合、別の計算方式への暗黙のフォールバックを拒否します。
@@ -43,7 +55,7 @@ docker run --rm -p 8080:8080 \
 
 天体暦の固定元とチェックサムは `scripts/fetch_ephemeris.py`、第三者ソフトウェアの表示は `THIRD_PARTY_NOTICES.md` で管理します。
 
-成功時の `POST /natal` は `schema_version`、`chart_type`、`calculation`、`bodies`、`angles`、`houses`、`aspects`、`warnings` を返します。型の正式な契約は `/openapi.json` と `swiss_api/models.py` で確認できます。`house_system_requested` と `house_system_used` を必ず区別し、切替時は `fallback_reason` と警告を返します。天体の黄経・黄緯・速度の単位はそれぞれ度・度・度/日です。`cusps_deg` は第1～第12ハウスの順です。
+成功時の `POST /natal` は `schema_version`、`chart_type`、`calculation`、`bodies`、`angles`、`houses`、`aspects`、`analysis`、`warnings` を返します。型の正式な契約は `/openapi.json` と `swiss_api/models.py` で確認できます。`house_system_requested` と `house_system_used` を必ず区別し、切替時は `fallback_reason` と警告を返します。天体の黄経・黄緯・速度の単位はそれぞれ度・度・度/日です。`cusps_deg` は第1～第12ハウスの順です。
 
 ```json
 {
@@ -60,7 +72,7 @@ docker run --rm -p 8080:8080 \
   "options": {
     "zodiac": "tropical",
     "house_system": "placidus",
-    "aspect_profile": "major_v1"
+    "orb_profile": "standard_v1"
   }
 }
 ```

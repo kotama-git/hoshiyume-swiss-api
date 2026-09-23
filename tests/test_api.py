@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from swiss_api.calculation import EphemerisUnavailable, SwissEngine, major_aspects
 from swiss_api.main import app, get_engine
 from swiss_api.models import NatalRequest
+from swiss_api.rules import current_rules, rules_sha256
 
 
 KNOWN = {
@@ -34,17 +35,17 @@ def test_health_without_ephemeris(client, monkeypatch):
     monkeypatch.delenv("SWISS_EPHE_PATH", raising=False)
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "not_ready",
-        "ephemeris_files_configured": False,
-        "source_offer_configured": True,
-        "engine_version": None,
-        "wrapper_version": None,
-        "ephemeris_dataset_sha256": None,
-        "rules_version": "natal_v1",
-        "license": "AGPL-3.0-or-later",
-        "source_code_url": "https://example.test/source/tree/test-commit",
-    }
+    result = response.json()
+    assert result["status"] == "not_ready"
+    assert result["ephemeris_files_configured"] is False
+    assert result["source_offer_configured"] is True
+    assert result["engine_version"] is None
+    assert result["wrapper_version"] is None
+    assert result["ephemeris_dataset_sha256"] is None
+    assert result["rules_version"] == current_rules()["rules_version"]
+    assert result["rules_sha256"] == rules_sha256()
+    assert result["body_ids"] == [body["id"] for body in current_rules()["bodies"]]
+    assert result["aspect_ids"] == [aspect["id"] for aspect in current_rules()["aspects"]]
 
 
 def test_health_not_ready_without_service_token(client, tmp_path, monkeypatch):
@@ -124,7 +125,7 @@ def test_unknown_time_must_not_contain_a_fabricated_time():
 
 def test_major_aspects_include_orb_boundary():
     bodies = [{"id": "sun", "longitude_deg": 0}, {"id": "moon", "longitude_deg": 8}]
-    assert major_aspects(bodies)[0]["type"] == "conjunction"
+    assert major_aspects(bodies)[0]["aspect_type"] == "conjunction"
     bodies[1]["longitude_deg"] = 8.001
     assert major_aspects(bodies) == []
 
@@ -155,8 +156,22 @@ def test_natal_uses_placidus_and_returns_versioned_json(client, tmp_path, monkey
     assert result["schema_version"] == "1.0"
     assert result["calculation"]["house_system_used"] == "placidus"
     assert result["houses"]["status"] == "computed"
-    assert len(result["bodies"]) == 10
+    assert len(result["bodies"]) == 12
+    assert result["bodies"][-2]["id"] == "north_node"
+    assert result["bodies"][-1]["id"] == "south_node"
+    assert result["angles"]["descendant_deg"] == 300
+    assert result["angles"]["ic_deg"] == 210
+    assert result["calculation"]["rules_version"] == current_rules()["rules_version"]
     assert result["calculation"]["reference_time_status"] == "birth_time"
+
+
+def test_standard_rules_include_every_formal_aspect_and_orb():
+    rules = current_rules()
+    for aspect in rules["aspects"]:
+        bodies = [{"id": "sun", "longitude_deg": 0}, {"id": "moon", "longitude_deg": aspect["angle_deg"] + aspect["orb_deg"]}]
+        found = major_aspects(bodies)
+        assert found[0]["aspect_type"] == aspect["id"]
+        assert found[0]["orb_deg"] == aspect["orb_deg"]
 
 
 def test_polar_placidus_error_switches_to_whole_sign(client, tmp_path, monkeypatch):

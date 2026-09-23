@@ -1,0 +1,47 @@
+{
+  "rules_version": "hoshiyume_astrology_v1",
+  "zodiac_system": "tropical",
+  "house_system": "placidus",
+  "house_system_swiss_code": "P",
+  "house_system_fallback": {"id": "whole_sign", "swiss_code": "W", "reason": "placidus_unavailable"},
+  "orb_profile": "standard_v1",
+  "bodies": [
+    {"id": "sun", "swiss_constant": "SUN", "include_in_balance": true},
+    {"id": "moon", "swiss_constant": "MOON", "include_in_balance": true},
+    {"id": "mercury", "swiss_constant": "MERCURY", "include_in_balance": true},
+    {"id": "venus", "swiss_constant": "VENUS", "include_in_balance": true},
+    {"id": "mars", "swiss_constant": "MARS", "include_in_balance": true},
+    {"id": "jupiter", "swiss_constant": "JUPITER", "include_in_balance": true},
+    {"id": "saturn", "swiss_constant": "SATURN", "include_in_balance": true},
+    {"id": "uranus", "swiss_constant": "URANUS", "include_in_balance": true},
+    {"id": "neptune", "swiss_constant": "NEPTUNE", "include_in_balance": true},
+    {"id": "pluto", "swiss_constant": "PLUTO", "include_in_balance": true},
+    {"id": "north_node", "swiss_constant": "TRUE_NODE", "label": "True North Node"},
+    {"id": "south_node", "derived_from": "north_node", "longitude_offset_deg": 180, "label": "True South Node"}
+  ],
+  "aspects": [
+    {"id": "conjunction", "angle_deg": 0, "orb_deg": 8},
+    {"id": "semi_sextile", "angle_deg": 30, "orb_deg": 2},
+    {"id": "semi_square", "angle_deg": 45, "orb_deg": 2},
+    {"id": "sextile", "angle_deg": 60, "orb_deg": 4},
+    {"id": "square", "angle_deg": 90, "orb_deg": 6},
+    {"id": "trine", "angle_deg": 120, "orb_deg": 6},
+    {"id": "sesquiquadrate", "angle_deg": 135, "orb_deg": 2},
+    {"id": "quincunx", "angle_deg": 150, "orb_deg": 3},
+    {"id": "opposition", "angle_deg": 180, "orb_deg": 8}
+  ],
+  "signs": [
+    {"id": "aries", "element": "fire", "modality": "cardinal", "ruler": "mars"},
+    {"id": "taurus", "element": "earth", "modality": "fixed", "ruler": "venus"},
+    {"id": "gemini", "element": "air", "modality": "mutable", "ruler": "mercury"},
+    {"id": "cancer", "element": "water", "modality": "cardinal", "ruler": "moon"},
+    {"id": "leo", "element": "fire", "modality": "fixed", "ruler": "sun"},
+    {"id": "virgo", "element": "earth", "modality": "mutable", "ruler": "mercury"},
+    {"id": "libra", "element": "air", "modality": "cardinal", "ruler": "venus"},
+    {"id": "scorpio", "element": "water", "modality": "fixed", "ruler": "pluto"},
+    {"id": "sagittarius", "element": "fire", "modality": "mutable", "ruler": "jupiter"},
+    {"id": "capricorn", "element": "earth", "modality": "cardinal", "ruler": "saturn"},
+    {"id": "aquarius", "element": "air", "modality": "fixed", "ruler": "uranus"},
+    {"id": "pisces", "element": "water", "modality": "mutable", "ruler": "neptune"}
+  ]
+}

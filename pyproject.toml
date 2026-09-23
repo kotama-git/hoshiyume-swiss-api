@@ -21,5 +21,8 @@ test = ["httpx>=0.27,<1", "pytest>=8,<10"]
 [tool.setuptools.packages.find]
 include = ["swiss_api*"]
 
+[tool.setuptools.package-data]
+swiss_api = ["rules/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

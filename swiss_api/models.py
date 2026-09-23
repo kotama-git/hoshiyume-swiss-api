@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from swiss_api.rules import current_rules
+
 
 class BirthInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -43,9 +45,20 @@ class BirthInput(BaseModel):
 class NatalOptions(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    zodiac: Literal["tropical"] = "tropical"
-    house_system: Literal["placidus"] = "placidus"
-    aspect_profile: Literal["major_v1"] = "major_v1"
+    zodiac: str = Field(default_factory=lambda: current_rules()["zodiac_system"])
+    house_system: str = Field(default_factory=lambda: current_rules()["house_system"])
+    orb_profile: str = Field(default_factory=lambda: current_rules()["orb_profile"])
+
+    @model_validator(mode="after")
+    def validate_supported_options(self) -> "NatalOptions":
+        rules = current_rules()
+        if self.zodiac != rules["zodiac_system"]:
+            raise ValueError("requested zodiac system is not supported")
+        if self.house_system != rules["house_system"]:
+            raise ValueError("requested house system is not supported")
+        if self.orb_profile != rules["orb_profile"]:
+            raise ValueError("requested orb profile is not supported")
+        return self
 
 
 class NatalRequest(BaseModel):
@@ -61,31 +74,33 @@ class CalculationMetadata(BaseModel):
     engine_version: str
     wrapper_version: str
     ephemeris_dataset_sha256: str
-    rules_version: Literal["natal_v1"]
-    zodiac: Literal["tropical"]
-    aspect_profile: Literal["major_v1"]
-    house_system_requested: Literal["placidus"]
-    house_system_used: Literal["placidus", "whole_sign"] | None
-    fallback_reason: Literal["placidus_unavailable"] | None
+    rules_version: str
+    rules_sha256: str
+    zodiac: str
+    orb_profile: str
+    house_system_requested: str
+    house_system_used: str | None
+    fallback_reason: str | None
     reference_utc_datetime: datetime
     reference_time_status: Literal["birth_time", "local_noon_not_birth_time"]
 
 
 class BodyResult(BaseModel):
-    id: Literal[
-        "sun", "moon", "mercury", "venus", "mars", "jupiter",
-        "saturn", "uranus", "neptune", "pluto",
-    ]
+    id: str
     longitude_deg: float
     latitude_deg: float
     speed_longitude_deg_per_day: float
     retrograde: bool
     position_status: Literal["exact", "date_reference_only"]
+    sign: str
+    house: int | None
 
 
 class AnglesResult(BaseModel):
     ascendant_deg: float
+    descendant_deg: float
     mc_deg: float
+    ic_deg: float
 
 
 class HousesResult(BaseModel):
@@ -94,11 +109,21 @@ class HousesResult(BaseModel):
 
 
 class AspectResult(BaseModel):
-    a: str
-    b: str
-    type: Literal["conjunction", "sextile", "square", "trine", "opposition"]
+    body1: str
+    body2: str
+    aspect_type: str
     exact_angle_deg: int
+    actual_angle_deg: float
     orb_deg: float
+    applying_or_separating: Literal["applying", "separating"] | None
+    context: Literal["natal", "transit", "progression", "synastry", "composite", "solar_return"]
+
+
+class AnalysisResult(BaseModel):
+    chart_ruler: str | None
+    house_rulers: list[dict[str, str | int]]
+    element_balance: dict[str, int]
+    modality_balance: dict[str, int]
 
 
 class NatalResponse(BaseModel):
@@ -109,4 +134,5 @@ class NatalResponse(BaseModel):
     angles: AnglesResult | None
     houses: HousesResult
     aspects: list[AspectResult]
+    analysis: AnalysisResult
     warnings: list[str]
