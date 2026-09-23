@@ -24,6 +24,7 @@ KNOWN = {
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setenv("SWISS_API_TOKEN", "test-service-secret")
+    monkeypatch.setenv("SOURCE_CODE_URL", "https://example.test/source/tree/test-commit")
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -36,10 +37,13 @@ def test_health_without_ephemeris(client, monkeypatch):
     assert response.json() == {
         "status": "not_ready",
         "ephemeris_files_configured": False,
+        "source_offer_configured": True,
         "engine_version": None,
         "wrapper_version": None,
         "ephemeris_dataset_sha256": None,
         "rules_version": "natal_v1",
+        "license": "AGPL-3.0-or-later",
+        "source_code_url": "https://example.test/source/tree/test-commit",
     }
 
 
@@ -50,6 +54,43 @@ def test_health_not_ready_without_service_token(client, tmp_path, monkeypatch):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "not_ready"
+
+
+def test_health_not_ready_without_source_offer(client, tmp_path, monkeypatch):
+    _mock_engine(tmp_path, monkeypatch)
+    monkeypatch.setenv("SWISS_EPHE_PATH", str(tmp_path))
+    monkeypatch.delenv("SOURCE_CODE_URL")
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "not_ready"
+    assert response.json()["source_offer_configured"] is False
+
+
+def test_every_response_offers_corresponding_source(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json()["license"] == "AGPL-3.0-or-later"
+    assert response.headers["link"] == (
+        '<https://example.test/source/tree/test-commit>; rel="source"'
+    )
+    redirect = client.get("/source", follow_redirects=False)
+    assert redirect.status_code == 307
+    assert redirect.headers["location"] == "https://example.test/source/tree/test-commit"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://example.test/source",
+        "https://user:secret@example.test/source",
+        "https://example.test/source#fragment",
+    ],
+)
+def test_invalid_source_offer_is_rejected(client, monkeypatch, value):
+    monkeypatch.setenv("SOURCE_CODE_URL", value)
+    response = client.get("/health")
+    assert response.json()["source_offer_configured"] is False
+    assert client.get("/source", follow_redirects=False).status_code == 503
 
 
 def test_natal_requires_service_authentication(client):

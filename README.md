@@ -1,6 +1,8 @@
 # HOSHIYUME Swiss Calculation API
 
-HOSHIYUME本体と別リポジトリで扱う、計算専用の開発中サービスです。現時点の実装は `GET /health` と `POST /natal` のみです。`/synastry` と `/transit`、HOSHIYUME・Supabaseとの接続は未実装です。公開・デプロイはしないでください。
+HOSHIYUME本体と別リポジトリで扱う、計算専用の開発中サービスです。現時点の実装は `GET /health` と `POST /natal` のみです。`/synastry` と `/transit` は未実装です。外部サービスを有効化する前に、対応する正確なソースURL、サービス用トークン、公式天体暦を必ず設定してください。
+
+このリポジトリは `AGPL-3.0-or-later` で公開する方針です。稼働中の全応答には `Link: <SOURCE_CODE_URL>; rel="source"` を付け、`/source` から対応ソースへ移動できます。`SOURCE_CODE_URL` は、実際にデプロイしたタグまたはコミットを指すHTTPS URLにしてください。ライセンス境界の判断はリポジトリ分離だけで確定しないため、HOSHIYUME側の密接な接続コードも別途公開対象として管理します。
 
 ## 計算の境界
 
@@ -21,10 +23,25 @@ python3 -m venv .venv
 python -m pip install -e '.[test]'
 export SWISS_EPHE_PATH=/absolute/path/to/ephe
 export SWISS_API_TOKEN=replace-with-a-long-random-secret
+export SOURCE_CODE_URL=https://github.com/your-account/hoshiyume-swiss-api/tree/exact-deployed-commit
 uvicorn swiss_api.main:app --host 127.0.0.1 --port 8000
 ```
 
-`GET /health` は天体暦ファイル未設定時に `not_ready` を返します。準備完了時は計算エンジン・ラッパー・天体暦データの版も返し、HOSHIYUMEのキャッシュキーに含めます。`POST /natal` はサービス用Bearerトークンが必須です。開発中でも外部公開しないでください。
+`GET /health` は、天体暦ファイル、サービス用トークン、対応ソースURLのいずれかが未設定なら `not_ready` を返します。準備完了時は計算エンジン・ラッパー・天体暦データの版も返し、HOSHIYUMEのキャッシュキーに含めます。`POST /natal` はサービス用Bearerトークンが必須です。
+
+## コンテナ
+
+`Dockerfile` は公式Swiss Ephemerisリポジトリの特定コミットから、1800～2399年用の惑星・月データだけを取得し、SHA-256が一致しないビルドを停止します。イメージは非rootユーザーで起動し、Cloud Runが指定する `PORT` を検証して使用します。
+
+```sh
+docker build -t hoshiyume-swiss-api .
+docker run --rm -p 8080:8080 \
+  -e SWISS_API_TOKEN=replace-with-a-long-random-secret \
+  -e SOURCE_CODE_URL=https://github.com/your-account/hoshiyume-swiss-api/tree/exact-deployed-commit \
+  hoshiyume-swiss-api
+```
+
+天体暦の固定元とチェックサムは `scripts/fetch_ephemeris.py`、第三者ソフトウェアの表示は `THIRD_PARTY_NOTICES.md` で管理します。
 
 成功時の `POST /natal` は `schema_version`、`chart_type`、`calculation`、`bodies`、`angles`、`houses`、`aspects`、`warnings` を返します。型の正式な契約は `/openapi.json` と `swiss_api/models.py` で確認できます。`house_system_requested` と `house_system_used` を必ず区別し、切替時は `fallback_reason` と警告を返します。天体の黄経・黄緯・速度の単位はそれぞれ度・度・度/日です。`cusps_deg` は第1～第12ハウスの順です。
 
@@ -52,4 +69,4 @@ uvicorn swiss_api.main:app --host 127.0.0.1 --port 8000
 
 `python -m pytest` で契約・例外処理を検証します。公式天体暦を設定すると実データのスモークテストも実行されます。より厳密な既知値比較、極地・歴史的タイムゾーンの境界テスト、運用上の認証・レート制限は公開前に追加します。
 
-`pyswisseph` とSwiss Ephemerisのライセンス条件について、公開前にAGPLまたはProfessional Licenseの選択と適用範囲を確認してください。API分離だけでHOSHIYUME本体を非公開にできると判断しないでください。
+Swiss EphemerisにはAGPLを選択します。ただし、API分離だけでAGPLの適用範囲が確定するとは判断せず、密接な接続部分の公開範囲を継続して確認してください。
