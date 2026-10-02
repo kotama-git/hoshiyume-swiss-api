@@ -229,3 +229,75 @@ def test_rejects_ephemeris_engine_fallback(tmp_path, monkeypatch):
     )
     with pytest.raises(EphemerisUnavailable):
         engine.natal(NatalRequest.model_validate(KNOWN))
+
+
+def test_cross_aspects_keep_chart_sides_and_do_not_add_internal_pairs():
+    from swiss_api.calculation import cross_aspects
+    first = [{"id": "sun", "longitude_deg": 0}, {"id": "moon", "longitude_deg": 120}]
+    second = [{"id": "sun", "longitude_deg": 60}]
+    result = cross_aspects(first, second, "synastry")
+    assert len(result) == 2
+    assert all(a["body1"].startswith("first:") and a["body2"] == "second:sun" for a in result)
+    assert all(a["context"] == "synastry" for a in result)
+
+
+@pytest.mark.parametrize("path", ["sky", "transit", "synastry"])
+def test_extension_routes_require_authentication(client, path):
+    assert client.post("/" + path, json={}).status_code == 401
+
+
+def test_sky_has_no_invented_geographic_houses(client, tmp_path, monkeypatch):
+    engine = _mock_engine(tmp_path, monkeypatch)
+    monkeypatch.setattr(swe, "houses_ex", lambda *args: pytest.fail("houses must not be computed without a location"))
+    app.dependency_overrides[get_engine] = lambda: engine
+    response = client.post("/sky", json={"schema_version": "1.0", "utc_datetime": "2026-10-02T03:00:00Z"}, headers={"Authorization": "Bearer test-service-secret"})
+    assert response.status_code == 200
+    chart = response.json()
+    assert chart["chart_type"] == "sky"
+    assert chart["angles"] is None and chart["houses"]["cusps_deg"] is None
+    assert all(b["position_status"] == "exact" and b["house"] is None for b in chart["bodies"])
+    assert chart["calculation"]["reference_time_status"] == "target_time"
+
+
+def test_transit_uses_selected_instant_and_cross_chart_aspects(client, tmp_path, monkeypatch):
+    engine = _mock_engine(tmp_path, monkeypatch)
+    monkeypatch.setattr(swe, "houses_ex", lambda *args: ([float(i * 30) for i in range(12)], [120.0, 30.0]))
+    app.dependency_overrides[get_engine] = lambda: engine
+    body = {"schema_version": "1.0", "natal": KNOWN, "target": {"schema_version": "1.0", "utc_datetime": "2030-01-01T03:00:00Z"}}
+    response = client.post("/transit", json=body, headers={"Authorization": "Bearer test-service-secret"})
+    assert response.status_code == 200
+    result = response.json()
+    assert result["second"]["calculation"]["reference_utc_datetime"] == "2030-01-01T03:00:00Z"
+    assert all(a["body1"].startswith("first:") and a["body2"].startswith("second:") for a in result["aspects"])
+
+
+def test_synastry_unknown_time_is_reference_only(client, tmp_path, monkeypatch):
+    engine = _mock_engine(tmp_path, monkeypatch)
+    monkeypatch.setattr(swe, "houses_ex", lambda *args: ([float(i * 30) for i in range(12)], [120.0, 30.0]))
+    app.dependency_overrides[get_engine] = lambda: engine
+    unknown = {**KNOWN, "birth": {**KNOWN["birth"], "birth_time_known": False, "local_time": None, "utc_datetime": None}}
+    response = client.post("/synastry", json={"schema_version": "1.0", "first": KNOWN, "second": unknown}, headers={"Authorization": "Bearer test-service-secret"})
+    assert response.status_code == 200
+    result = response.json()
+    assert result["aspects"] == []
+    assert result["second"]["angles"] is None
+    assert "unknown_birth_time_no_firm_cross_aspects" in result["warnings"]
+
+
+@pytest.mark.parametrize("instant", ["2026-10-02T12:00:00", "2026-10-02T12:00:00+09:00", "2400-01-01T00:00:00Z"])
+def test_sky_rejects_invalid_instant(client, instant):
+    response = client.post("/sky", json={"schema_version": "1.0", "utc_datetime": instant}, headers={"Authorization": "Bearer test-service-secret"})
+    assert response.status_code == 422
+
+
+def test_transit_reuses_saved_natal_and_rejects_outdated_calculation(tmp_path, monkeypatch):
+    from swiss_api.models import TransitRequest
+    engine = _mock_engine(tmp_path, monkeypatch)
+    monkeypatch.setattr(swe, "houses_ex", lambda *args: ([float(i * 30) for i in range(12)], [120.0, 30.0]))
+    saved = engine.natal(NatalRequest.model_validate(KNOWN))
+    target = {"schema_version": "1.0", "utc_datetime": "2026-10-02T03:00:00Z"}
+    result = engine.transit(TransitRequest.model_validate({"schema_version":"1.0", "natal":saved, "target":target}))
+    assert result["first"]["bodies"] == saved["bodies"]
+    saved["calculation"]["rules_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="version does not match"):
+        engine.transit(TransitRequest.model_validate({"schema_version":"1.0", "natal":saved, "target":target}))

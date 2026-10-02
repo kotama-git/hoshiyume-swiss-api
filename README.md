@@ -1,6 +1,6 @@
 # HOSHIYUME Swiss Calculation API
 
-HOSHIYUME本体と別リポジトリで扱う、計算専用の開発中サービスです。現時点の実装は `GET /health` と `POST /natal` のみです。`/synastry` と `/transit` は未実装です。外部サービスを有効化する前に、対応する正確なソースURL、サービス用トークン、公式天体暦を必ず設定してください。
+HOSHIYUME本体と別リポジトリで扱う、計算専用の開発中サービスです。実装は `GET /health`、`POST /natal`、`POST /sky`、`POST /synastry`、`POST /transit` です。外部サービスを有効化する前に、対応する正確なソースURL、サービス用トークン、公式天体暦を必ず設定してください。
 
 このリポジトリは `AGPL-3.0-or-later` で公開する方針です。稼働中の全応答には `Link: <SOURCE_CODE_URL>; rel="source"` を付け、`/source` から対応ソースへ移動できます。`SOURCE_CODE_URL` は、実際にデプロイしたタグまたはコミットを指すHTTPS URLにしてください。ライセンス境界の判断はリポジトリ分離だけで確定しないため、HOSHIYUME側の密接な接続コードも別途公開対象として管理します。
 
@@ -82,3 +82,18 @@ docker run --rm -p 8080:8080 \
 `python -m pytest` で契約・例外処理を検証します。公式天体暦を設定すると実データのスモークテストも実行されます。より厳密な既知値比較、極地・歴史的タイムゾーンの境界テスト、運用上の認証・レート制限は公開前に追加します。
 
 Swiss EphemerisにはAGPLを選択します。ただし、API分離だけでAGPLの適用範囲が確定するとは判断せず、密接な接続部分の公開範囲を継続して確認してください。
+
+## 今日・指定日時と相性の計算
+
+- `/sky` はUTCの指定日時の天体位置を返す。`location` は任意で、未設定なら軸とハウスを返さない。対応年代は1800〜2399年。
+- `/synastry` は `first` と `second` の出生図の間だけのアスペクトを返す。同一天体同士も比較し、`first:sun` / `second:sun` のように側を明記する。
+- `/transit` は `natal` と `target` の指定日時の天体図を重ねる。
+- `/synastry` の `first`、`/transit` の `natal` には `/natal` の保存済み応答も指定できる。計算エンジン・ラッパー・天体暦・ルール版が現行版と一致しない保存結果を拒否する。保存済み出生図を閲覧ごとに計算し直さない。
+- 出生時刻不明を含む比較では日付の参考位置を返し、二つの図の確定アスペクトは返さない。ハウス切替と警告も元の図に保持する。
+- AI・点数・確率・人物ID・人物名はこのAPIで扱わない。全計算ルートは既存のサービス用Bearer認証を必須とする。
+
+```json
+{"schema_version":"1.0","utc_datetime":"2026-10-02T03:00:00Z","location":null}
+```
+
+上記は `/sky` の例（日本時間正午）。`/transit` は `{"schema_version":"1.0","natal":出生図リクエストまたは保存済み応答,"target":上記のskyリクエスト}`、`/synastry` は `{"schema_version":"1.0","first":出生図リクエストまたは保存済み応答,"second":相手の出生図リクエスト}`。正式な契約は `/openapi.json` を参照。

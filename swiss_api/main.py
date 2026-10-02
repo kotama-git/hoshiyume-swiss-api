@@ -13,7 +13,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from swiss_api.calculation import EphemerisUnavailable, SwissEngine
-from swiss_api.models import NatalRequest, NatalResponse
+from swiss_api.models import NatalRequest, NatalResponse, SkyRequest, SynastryRequest, TransitRequest, SkyResponse, OverlayResponse
 from swiss_api.rules import current_rules, rules_sha256
 
 app = FastAPI(title="HOSHIYUME Calculation API", version="0.1.0")
@@ -122,3 +122,27 @@ def natal(request: NatalRequest, engine: SwissEngine = Depends(get_engine)) -> d
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def calculate_extension(engine, method, request):
+    try:
+        return getattr(engine, method)(request)
+    except EphemerisUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/sky", response_model=SkyResponse, dependencies=[Depends(require_service_token)])
+def sky(request: SkyRequest, engine: SwissEngine = Depends(get_engine)) -> dict:
+    return calculate_extension(engine, "sky", request)
+
+
+@app.post("/synastry", response_model=OverlayResponse, dependencies=[Depends(require_service_token)])
+def synastry(request: SynastryRequest, engine: SwissEngine = Depends(get_engine)) -> dict:
+    return calculate_extension(engine, "synastry", request)
+
+
+@app.post("/transit", response_model=OverlayResponse, dependencies=[Depends(require_service_token)])
+def transit(request: TransitRequest, engine: SwissEngine = Depends(get_engine)) -> dict:
+    return calculate_extension(engine, "transit", request)

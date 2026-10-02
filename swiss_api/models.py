@@ -136,3 +136,56 @@ class NatalResponse(BaseModel):
     aspects: list[AspectResult]
     analysis: AnalysisResult
     warnings: list[str]
+
+
+class SkyLocation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    latitude_deg: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude_deg: float = Field(ge=-180, le=180, allow_inf_nan=False)
+
+
+class SkyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    schema_version: Literal["1.0"]
+    utc_datetime: datetime
+    location: SkyLocation | None = None
+
+    @model_validator(mode="after")
+    def validate_instant(self) -> "SkyRequest":
+        if self.utc_datetime.tzinfo is None or self.utc_datetime.utcoffset() != timedelta(0):
+            raise ValueError("utc_datetime must use UTC")
+        if not 1800 <= self.utc_datetime.year <= 2399:
+            raise ValueError("supported years are 1800 through 2399")
+        return self
+
+
+class SynastryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    schema_version: Literal["1.0"]
+    first: NatalRequest | NatalResponse
+    second: NatalRequest | NatalResponse
+
+
+class TransitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    schema_version: Literal["1.0"]
+    natal: NatalRequest | NatalResponse
+    target: SkyRequest
+
+
+class SkyCalculationMetadata(CalculationMetadata):
+    reference_time_status: Literal["target_time"]
+
+
+class SkyResponse(NatalResponse):
+    chart_type: Literal["sky"]
+    calculation: SkyCalculationMetadata
+
+
+class OverlayResponse(BaseModel):
+    schema_version: Literal["1.0"]
+    chart_type: Literal["synastry", "transit"]
+    first: NatalResponse
+    second: NatalResponse | SkyResponse
+    aspects: list[AspectResult]
+    warnings: list[str]
