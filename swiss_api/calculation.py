@@ -4,14 +4,14 @@ from datetime import datetime, time, timezone
 from functools import wraps
 from hashlib import sha256
 from importlib.metadata import version
-from itertools import combinations
+from itertools import combinations, product
 from pathlib import Path
 from threading import RLock
 from zoneinfo import ZoneInfo
 
 import swisseph as swe
 
-from swiss_api.models import NatalRequest
+from swiss_api.models import NatalRequest, NatalResponse, SkyRequest, SynastryRequest, TransitRequest
 from swiss_api.rules import current_rules, rules_sha256
 
 
@@ -76,6 +76,15 @@ def major_aspects(bodies: list[dict]) -> list[dict]:
     return configured_aspects(bodies, "natal", current_rules())
 
 
+def cross_aspects(first: list[dict], second: list[dict], context: str) -> list[dict]:
+    """Only pairs crossing charts, with chart-side identity kept explicit."""
+    found = []
+    for a, b in product(first, second):
+        pair = [{**a, "id": "first:" + a["id"]}, {**b, "id": "second:" + b["id"]}]
+        found.extend(configured_aspects(pair, context, current_rules()))
+    return found
+
+
 def _basic_analysis(
     bodies: list[dict],
     angles: dict[str, float] | None,
@@ -134,6 +143,56 @@ class SwissEngine:
                 for chunk in iter(lambda: source.read(1024 * 1024), b""):
                     digest.update(chunk)
         return digest.hexdigest()
+
+    @_serialized_swiss_call
+    def sky(self, request: SkyRequest) -> dict:
+        instant = request.utc_datetime
+        location = request.location
+        # Reuse the same planetary engine, never infer a geographic location.
+        chart = self.natal(NatalRequest.model_validate({
+            "schema_version": "1.0", "birth": {
+                "local_date": instant.date(), "local_time": instant.time().replace(tzinfo=None),
+                "birth_time_known": True, "time_zone": "UTC", "utc_datetime": instant,
+                "latitude_deg": location.latitude_deg if location else 90,
+                "longitude_deg": location.longitude_deg if location else 0,
+            },
+        }))
+        chart["chart_type"] = "sky"
+        chart["calculation"]["reference_time_status"] = "target_time"
+        chart["aspects"] = configured_aspects(chart["bodies"], "transit", current_rules())
+        if not location:
+            chart["warnings"] = ["location_unset_no_angles_or_houses"]
+        return chart
+
+    @_serialized_swiss_call
+    def synastry(self, request: SynastryRequest) -> dict:
+        first, second = self._natal_or_saved(request.first), self._natal_or_saved(request.second)
+        return self._overlay(first, second, "synastry")
+
+    @_serialized_swiss_call
+    def transit(self, request: TransitRequest) -> dict:
+        return self._overlay(self._natal_or_saved(request.natal), self.sky(request.target), "transit")
+
+    def _natal_or_saved(self, request: NatalRequest | NatalResponse) -> dict:
+        if isinstance(request, NatalRequest):
+            return self.natal(request)
+        meta = request.calculation
+        if (meta.engine_version != swe.version or meta.wrapper_version != version("pyswisseph")
+            or meta.ephemeris_dataset_sha256 != self.dataset_hash
+            or meta.rules_version != current_rules()["rules_version"]
+            or meta.rules_sha256 != rules_sha256()):
+            raise ValueError("saved natal calculation version does not match")
+        return request.model_dump(mode="json")
+
+    def _overlay(self, first: dict, second: dict, context: str) -> dict:
+        uncertain = any(body["position_status"] != "exact" for body in first["bodies"] + second["bodies"])
+        return {
+            "schema_version": "1.0", "chart_type": context,
+            "first": first, "second": second,
+            "aspects": [] if uncertain else cross_aspects(first["bodies"], second["bodies"], context),
+            "warnings": list(dict.fromkeys(first["warnings"] + second["warnings"] +
+                (["unknown_birth_time_no_firm_cross_aspects"] if uncertain else []))),
+        }
 
     @_serialized_swiss_call
     def natal(self, request: NatalRequest) -> dict:
